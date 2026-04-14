@@ -17,7 +17,7 @@ char getCharFromLightness(float lightness) {
 int main(int argc, char *argv[]) {
 
   if (argc != 3) {
-    printf("Usage: ascii-render <file>\n");
+    printf("Usage: ascii-render <file> <out-file>\n");
     return 1;
   }
 
@@ -37,6 +37,8 @@ int main(int argc, char *argv[]) {
 
   size_t out_size = cols * rows + rows + 1;
   char *out = malloc(out_size);
+
+  int sample_size = 2;
 
   unsigned char r, g, b;
   float rel_lum;
