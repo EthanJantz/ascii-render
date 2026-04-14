@@ -30,44 +30,44 @@ int main(int argc, char *argv[]) {
 
   printf("Loaded: %dx%d, %d channels\n", width, height, channels);
 
-  int block_width = 4;
-  int block_height = 8;
+  int block_width = 8;
+  int block_height = 16;
   int cols = width / block_width;
   int rows = height / block_height;
 
-  size_t out_size = cols * rows + rows + 1;
-  char *out = malloc(out_size);
+  int samples = 4;
 
-  int sample_size = 2;
+  size_t out_size = cols * rows + rows;
+  char *out = malloc(out_size);
 
   unsigned char r, g, b;
   float rel_lum;
+  float avg_rel_lum;
 
   for (int row = 0; row < rows; row++) {
     for (int col = 0; col < cols; col++) {
       for (int ch = 0; ch < channels; ch++) {
+        avg_rel_lum = 0.0;
 
-        int center_x = col * block_width + block_width / 2;
-        int center_y = row * block_height + block_height / 2;
+        for (int s = 1; s <= samples; s++) {
+          int x = col * block_width + block_width / s;
+          int y = row * block_height + block_height / s;
 
-        if (ch == 0) {
-          r = img[(center_y * width + center_x) * 3 + ch];
-        } else if (ch == 1) {
-          g = img[(center_y * width + center_x) * 3 + ch];
-        } else {
-          b = img[(center_y * width + center_x) * 3 + ch];
-          rel_lum = ((r * 0.2126) + (g * 0.7152) + (b * 0.0722)) / 255;
+          if (ch == 0) {
+            r = img[(y * width + x) * 3 + ch];
+          } else if (ch == 1) {
+            g = img[(y * width + x) * 3 + ch];
+          } else {
+            b = img[(y * width + x) * 3 + ch];
+            rel_lum = ((r * 0.2126) + (g * 0.7152) + (b * 0.0722)) / 255;
+            avg_rel_lum += rel_lum;
+          }
         }
       }
-      printf("Relative luminance: %f\n", rel_lum);
+      avg_rel_lum /= samples;
+      printf("Sampled Relative luminance: %f\n", avg_rel_lum);
 
-      if (rel_lum < 0.08) {
-        out[row * (cols + 1) + col] = ' ';
-      } else if (rel_lum < 0.09) {
-        out[row * (cols + 1) + col] = '.';
-      } else {
-        out[row * (cols + 1) + col] = '@';
-      }
+      out[row * (cols + 1) + col] = getCharFromLightness(avg_rel_lum);
 
       if (col == cols - 1) {
         out[row * (cols + 1) + cols] = '\n';
