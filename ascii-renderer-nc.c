@@ -1,6 +1,6 @@
+#include <assert.h>
 #include <math.h>
 #include <ncurses.h>
-#include <panel.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -14,16 +14,32 @@ typedef struct {
   size_t size;
 } ASCIIRender;
 
+typedef struct {
+  unsigned char *img;
+  int width;
+  int height;
+  int channels;
+} Image;
+
+int readImg(char *filename, Image *img);
 ASCIIRender generateASCIIRender(char *out, size_t out_size, int cols, int rows);
 char getCharFromLightness(float lightness);
-ASCIIRender convertToASCII(unsigned char *img, int width, int height,
-                           int channels, int samples);
+ASCIIRender convertToASCII(Image *img, int samples);
 
 char ASCII[10] = {' ', '.', ':', '-', '=', '+', '*', '#', '%', '@'};
 int N_ASCII = sizeof(ASCII) / sizeof(ASCII[0]);
 int BLOCK_WIDTH = 8;
 int BLOCK_HEIGHT = 16;
 int SAMPLES = 8;
+
+int readImg(char *filename, Image *img) {
+  img->img = stbi_load(filename, &img->width, &img->height, &img->channels, 3);
+  if (img->img == NULL) {
+    printf("Could not load image\n");
+    return 1;
+  }
+  return 0;
+}
 
 char getCharFromLightness(float lightness) {
   int idx = floor(lightness * (N_ASCII - 1));
@@ -32,26 +48,28 @@ char getCharFromLightness(float lightness) {
 
 ASCIIRender generateASCIIRender(char *out, size_t out_size, int cols,
                                 int rows) {
-  // TODO: Validate buf non-null, rows/cols > 0, size matches dimensions
+  assert(out != NULL);
+  assert(rows > 0);
+  assert(cols > 0);
+  assert(out_size == rows * cols + rows);
   ASCIIRender render = {
       .buf = out, .rows = rows, .cols = cols, .size = out_size};
   return render;
 }
 
-ASCIIRender convertToASCII(unsigned char *img, int width, int height,
-                           int channels, int samples) {
+ASCIIRender convertToASCII(Image *img, int samples) {
   unsigned char r, g, b;
   float rel_lum;
   float avg_rel_lum;
-  int cols = width / BLOCK_WIDTH;
-  int rows = height / BLOCK_HEIGHT;
+  int cols = img->width / BLOCK_WIDTH;
+  int rows = img->height / BLOCK_HEIGHT;
 
   size_t out_size = cols * rows + rows;
   char *out = malloc(out_size);
 
   for (int row = 0; row < rows; row++) {
     for (int col = 0; col < cols; col++) {
-      for (int ch = 0; ch < channels; ch++) {
+      for (int ch = 0; ch < img->channels; ch++) {
         avg_rel_lum = 0.0;
 
         for (int s = 1; s <= samples; s++) {
@@ -59,11 +77,11 @@ ASCIIRender convertToASCII(unsigned char *img, int width, int height,
           int y = row * BLOCK_HEIGHT + BLOCK_HEIGHT / s;
 
           if (ch == 0) {
-            r = img[(y * width + x) * 3 + ch];
+            r = img->img[(y * img->width + x) * 3 + ch];
           } else if (ch == 1) {
-            g = img[(y * width + x) * 3 + ch];
+            g = img->img[(y * img->width + x) * 3 + ch];
           } else {
-            b = img[(y * width + x) * 3 + ch];
+            b = img->img[(y * img->width + x) * 3 + ch];
             rel_lum = ((r * 0.2126) + (g * 0.7152) + (b * 0.0722)) / 255;
             avg_rel_lum += rel_lum;
           }
@@ -71,6 +89,10 @@ ASCIIRender convertToASCII(unsigned char *img, int width, int height,
       }
       avg_rel_lum /= samples;
       out[row * (cols + 1) + col] = getCharFromLightness(avg_rel_lum);
+
+      if (col == cols - 1) {
+        out[row * (cols + 1) + cols] = '\n';
+      }
     }
   }
 
@@ -92,6 +114,7 @@ int main() {
   int sx, sy;
   getmaxyx(stdscr, sy, sx);
 
+  // init windows
   int input_w, input_h, input_x, input_y, ascii_w, ascii_h, ascii_x, ascii_y,
       margin;
   margin = 1; // 1 char
@@ -115,33 +138,26 @@ int main() {
   mvwprintw(ascii_win, 1, 1, "pos: %dx%d size: %dwx%dh", ascii_x, ascii_y,
             ascii_w, ascii_h);
 
-  // refresh, should display the window within the border window
-  wrefresh(ascii_win);
-  wrefresh(input_win);
+  // generate ascii render from image
+  Image img;
+  readImg("circle.png", &img);
+  ASCIIRender render = convertToASCII(&img, SAMPLES);
 
-  getch();
+  // loop until user presses q
+  char ch;
+  do {
+    getmaxyx(stdscr, sy, sx);
+    wrefresh(input_win);
+    for (int i = 0; i < render.rows; i++) {
+      mvwaddnstr(ascii_win, i + 1, 1, &render.buf[i * (render.cols + 1)],
+                 render.cols);
+    }
+    wrefresh(ascii_win);
 
-  // int width, height, channels;
-  // unsigned char *img = stbi_load(argv[1], &width, &height, &channels, 3);
-  // if (img == NULL) {
-  //   printf("Could not load image\n");
-  //   return 1;
-  // }
-  //
-  // // printf("Loaded: %dx%d, %d channels\n", width, height, channels);
-  //
-  // ASCIIRender render = convertToASCII(img, width, height, channels, SAMPLES);
-  //
-  // FILE *fo = fopen(argv[2], "wb");
-  // if (fo == NULL) {
-  //   free(render.buf);
-  //   return 1;
-  // }
-  //
-  // size_t bytes_written = fwrite(render.buf, 1, render.size, fo);
-  // printf("Wrote %zu bytes\n", bytes_written);
-  // free(render.buf);
-  // stbi_image_free(img);
+    ch = getch();
+  } while (ch != 'q');
 
+  free(render.buf);
+  stbi_image_free(img.img);
   endwin();
 }
