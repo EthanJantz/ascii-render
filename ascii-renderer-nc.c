@@ -24,13 +24,12 @@ typedef struct {
 int readImg(char *filename, Image *img);
 ASCIIRender generateASCIIRender(char *out, size_t out_size, int cols, int rows);
 char getCharFromLightness(float lightness);
-ASCIIRender convertToASCII(Image *img, int samples);
+ASCIIRender convertToASCII(Image *img, int block_width, int samples);
 
 char ASCII[10] = {' ', '.', ':', '-', '=', '+', '*', '#', '%', '@'};
 int N_ASCII = sizeof(ASCII) / sizeof(ASCII[0]);
-int BLOCK_WIDTH = 8;
-int BLOCK_HEIGHT = 16;
-int SAMPLES = 8;
+int BLOCK_ASPECT_RATIO = 2;
+int SAMPLES = 1;
 
 int readImg(char *filename, Image *img) {
   img->img = stbi_load(filename, &img->width, &img->height, &img->channels, 3);
@@ -57,12 +56,15 @@ ASCIIRender generateASCIIRender(char *out, size_t out_size, int cols,
   return render;
 }
 
-ASCIIRender convertToASCII(Image *img, int samples) {
+ASCIIRender convertToASCII(Image *img, int block_width, int samples) {
   unsigned char r, g, b;
   float rel_lum;
   float avg_rel_lum;
-  int cols = img->width / BLOCK_WIDTH;
-  int rows = img->height / BLOCK_HEIGHT;
+  int block_height =
+      block_width *
+      BLOCK_ASPECT_RATIO; // monospaced term chars are 2:1 height/width
+  int cols = img->width / block_width;
+  int rows = img->height / block_height;
 
   size_t out_size = cols * rows + rows;
   char *out = malloc(out_size);
@@ -73,8 +75,8 @@ ASCIIRender convertToASCII(Image *img, int samples) {
         avg_rel_lum = 0.0;
 
         for (int s = 1; s <= samples; s++) {
-          int x = col * BLOCK_WIDTH + BLOCK_WIDTH / s;
-          int y = row * BLOCK_HEIGHT + BLOCK_HEIGHT / s;
+          int x = col * block_width + block_width / s;
+          int y = row * block_height + block_height / s;
 
           if (ch == 0) {
             r = img->img[(y * img->width + x) * 3 + ch];
@@ -138,10 +140,29 @@ int main() {
   mvwprintw(ascii_win, 1, 1, "pos: %dx%d size: %dwx%dh", ascii_x, ascii_y,
             ascii_w, ascii_h);
 
-  // generate ascii render from image
+  // read image
   Image img;
   readImg("circle.png", &img);
-  ASCIIRender render = convertToASCII(&img, SAMPLES);
+
+  // get render that fits within ascii_win
+  ASCIIRender render = {.buf = NULL};
+  int interior_h = ascii_h - 2;
+  int interior_w = ascii_w - 2;
+  // ceil idiom: ceil(x / y) == (x + y - 1) / y
+  int bw_w = (img.width + interior_w - 1) / interior_w;
+  int bw_h = (img.height + (BLOCK_ASPECT_RATIO * interior_h) - 1) /
+             (BLOCK_ASPECT_RATIO * interior_h);
+  int bw = bw_h > bw_w ? bw_h : bw_w;
+  if (bw == 0)
+    bw = 1;
+  render = convertToASCII(&img, bw, SAMPLES);
+
+  // center render if necessary
+  int offset_h, offset_w;
+  if (render.cols < interior_w)
+    offset_w = (interior_w - render.cols) / 2;
+  if (render.rows < interior_h)
+    offset_h = (interior_h - render.rows) / 2;
 
   // loop until user presses q
   char ch;
@@ -149,9 +170,11 @@ int main() {
     getmaxyx(stdscr, sy, sx);
     wrefresh(input_win);
     for (int i = 0; i < render.rows; i++) {
-      mvwaddnstr(ascii_win, i + 1, 1, &render.buf[i * (render.cols + 1)],
-                 render.cols);
+      mvwaddnstr(ascii_win, offset_h + i, offset_w,
+                 &render.buf[i * (render.cols + 1)], render.cols);
     }
+    mvwprintw(ascii_win, 1, 1, "pos: %dx%d size: %dwx%dh", ascii_x, ascii_y,
+              ascii_w, ascii_h);
     wrefresh(ascii_win);
 
     ch = getch();
