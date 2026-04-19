@@ -148,17 +148,18 @@ int main() {
   ASCIIRender render = {.buf = NULL};
   int interior_h = ascii_h - 2;
   int interior_w = ascii_w - 2;
+  int denom_h = BLOCK_ASPECT_RATIO * interior_h;
   // ceil idiom: ceil(x / y) == (x + y - 1) / y
   int bw_w = (img.width + interior_w - 1) / interior_w;
-  int bw_h = (img.height + (BLOCK_ASPECT_RATIO * interior_h) - 1) /
-             (BLOCK_ASPECT_RATIO * interior_h);
+  int bw_h = (img.height + denom_h - 1) / denom_h;
   int bw = bw_h > bw_w ? bw_h : bw_w;
   if (bw == 0)
     bw = 1;
   render = convertToASCII(&img, bw, SAMPLES);
 
   // center render if necessary
-  int offset_h, offset_w;
+  int offset_h = 0;
+  int offset_w = 0;
   if (render.cols < interior_w)
     offset_w = (interior_w - render.cols) / 2;
   if (render.rows < interior_h)
