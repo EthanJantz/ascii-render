@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <ctype.h>
 #include <math.h>
 #include <ncurses.h>
 #include <stdio.h>
@@ -21,10 +22,16 @@ typedef struct {
   int channels;
 } Image;
 
+typedef struct {
+  char buf[256];
+  int len;
+} UserInput;
+
 int readImg(char *filename, Image *img);
 ASCIIRender generateASCIIRender(char *out, size_t out_size, int cols, int rows);
 char getCharFromLightness(float lightness);
 ASCIIRender convertToASCII(Image *img, int block_width, int samples);
+void updateInput(UserInput *cur, int in);
 
 char ASCII[10] = {' ', '.', ':', '-', '=', '+', '*', '#', '%', '@'};
 int N_ASCII = sizeof(ASCII) / sizeof(ASCII[0]);
@@ -102,6 +109,24 @@ ASCIIRender convertToASCII(Image *img, int block_width, int samples) {
   return render;
 }
 
+void updateInput(UserInput *cur, int in) {
+  if (in == KEY_BACKSPACE || in == 127 || in == 8) {
+    if (cur->len == 0)
+      return;
+    --cur->len;
+    cur->buf[cur->len] = '\0';
+    return;
+  }
+
+  if (!isprint(in) || cur->len >= sizeof(cur->buf) - 1)
+    return;
+
+  cur->buf[cur->len] = in;
+  ++cur->len;
+  cur->buf[cur->len] = '\0';
+  return;
+}
+
 int main() {
   srand(time(0));
   set_escdelay(25);
@@ -140,12 +165,15 @@ int main() {
   mvwprintw(ascii_win, 1, 1, "pos: %dx%d size: %dwx%dh", ascii_x, ascii_y,
             ascii_w, ascii_h);
 
+  // init state
+  UserInput input = {"", 0};
+
   // read image
   Image img;
   readImg("circle.png", &img);
 
   // get render that fits within ascii_win
-  ASCIIRender render = {.buf = NULL};
+  ASCIIRender render = {.buf = NULL, 0};
   int interior_h = ascii_h - 2;
   int interior_w = ascii_w - 2;
   int denom_h = BLOCK_ASPECT_RATIO * interior_h;
@@ -166,7 +194,7 @@ int main() {
     offset_h = (interior_h - render.rows) / 2;
 
   // loop until user presses q
-  char ch;
+  int ch = getch();
   do {
     getmaxyx(stdscr, sy, sx);
     wrefresh(input_win);
@@ -178,8 +206,13 @@ int main() {
               ascii_w, ascii_h);
     wrefresh(ascii_win);
 
+    if (ch == 27)
+      break;
+    updateInput(&input, ch);
+    mvwprintw(input_win, 1, 1, "%s", input.buf);
+    wrefresh(input_win);
     ch = getch();
-  } while (ch != 'q');
+  } while (true);
 
   free(render.buf);
   stbi_image_free(img.img);
