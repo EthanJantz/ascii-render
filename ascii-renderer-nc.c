@@ -170,7 +170,7 @@ int main() {
 
   // read image
   Image img;
-  readImg("circle.png", &img);
+  readImg("eigenface.png", &img);
 
   // get render that fits within ascii_win
   ASCIIRender render = {.buf = NULL, 0};
@@ -186,17 +186,25 @@ int main() {
   render = convertToASCII(&img, bw, SAMPLES);
 
   // center render if necessary
-  int offset_h = 0;
-  int offset_w = 0;
-  if (render.cols < interior_w)
+  int offset_h = 1;
+  int offset_w = 1;
+  if (render.cols < interior_w) {
     offset_w = (interior_w - render.cols) / 2;
-  if (render.rows < interior_h)
+    offset_w = offset_w == 0 ? 1 : offset_w;
+  }
+
+  if (render.rows < interior_h) {
     offset_h = (interior_h - render.rows) / 2;
+    offset_h = offset_h == 0 ? 1 : offset_h;
+  }
 
   // loop until user presses q
   int ch = getch();
   do {
-    getmaxyx(stdscr, sy, sx);
+    if (ch == 27)
+      break;
+    updateInput(&input, ch);
+
     wrefresh(input_win);
     for (int i = 0; i < render.rows; i++) {
       mvwaddnstr(ascii_win, offset_h + i, offset_w,
@@ -206,9 +214,6 @@ int main() {
               ascii_w, ascii_h);
     wrefresh(ascii_win);
 
-    if (ch == 27)
-      break;
-    updateInput(&input, ch);
     mvwprintw(input_win, 1, 1, "%s", input.buf);
     wrefresh(input_win);
     ch = getch();
