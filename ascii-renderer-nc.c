@@ -40,12 +40,15 @@ typedef struct {
   bool should_quit;
 } AppState;
 
+// TUI mgmt
 void setup_ncurses();
 AppState init_state();
 void update(AppState *state, int event);
 void render(AppState *state);
 void teardown(AppState *state);
 void reinit_windows(AppState *state);
+
+// Helpers
 int read_img(char *filename, Image *img);
 ASCIIRender generate_ascii_render(char *out, size_t out_size, int cols,
                                   int rows);
@@ -53,6 +56,7 @@ char get_char_from_lightness(float lightness);
 ASCIIRender convert_to_ascii(Image *img, int block_width, int samples);
 void update_input(UserInput *cur, int in);
 
+// Constants
 char ASCII[10] = {' ', '.', ':', '-', '=', '+', '*', '#', '%', '@'};
 int N_ASCII = sizeof(ASCII) / sizeof(ASCII[0]);
 int BLOCK_ASPECT_RATIO = 2;
@@ -107,7 +111,6 @@ AppState init_state() {
 }
 
 void update(AppState *state, int event) {
-
   switch (event) {
   case 27:
     state->should_quit = 1;
@@ -115,33 +118,32 @@ void update(AppState *state, int event) {
   case '\n':
   case '\r':
     state->should_rerender = 1;
+    if (state->should_rerender && state->user_input.len > 0) {
+      int err = read_img(state->user_input.buf, &state->img);
+      if (err) {
+        mvwprintw(state->ascii_win, 2, 1, "Could not load image\n");
+        return;
+      }
+
+      int ascii_w, ascii_h;
+      getmaxyx(state->ascii_win, ascii_h, ascii_w);
+      int interior_h = ascii_h - 2;
+      int interior_w = ascii_w - 2;
+      int denom_h = BLOCK_ASPECT_RATIO * interior_h;
+      // ceil idiom: ceil(x / y) == (x + y - 1) / y
+      int bw_w = (state->img.width + interior_w - 1) / interior_w;
+      int bw_h = (state->img.height + denom_h - 1) / denom_h;
+      int bw = bw_h > bw_w ? bw_h : bw_w;
+      if (bw == 0)
+        bw = 1;
+
+      state->cur_render = convert_to_ascii(&state->img, bw, SAMPLES);
+    }
     return;
   default:
     update_input(&state->user_input, event);
     state->should_rerender = 1;
     break;
-  }
-
-  if (state->should_rerender && state->user_input.len > 0) {
-    int err = read_img(state->user_input.buf, &state->img);
-    if (err) {
-      mvwprintw(state->ascii_win, 2, 1, "Could not load image\n");
-      return;
-    }
-
-    int ascii_w, ascii_h;
-    getmaxyx(state->ascii_win, ascii_h, ascii_w);
-    int interior_h = ascii_h - 2;
-    int interior_w = ascii_w - 2;
-    int denom_h = BLOCK_ASPECT_RATIO * interior_h;
-    // ceil idiom: ceil(x / y) == (x + y - 1) / y
-    int bw_w = (state->img.width + interior_w - 1) / interior_w;
-    int bw_h = (state->img.height + denom_h - 1) / denom_h;
-    int bw = bw_h > bw_w ? bw_h : bw_w;
-    if (bw == 0)
-      bw = 1;
-
-    state->cur_render = convert_to_ascii(&state->img, bw, SAMPLES);
   }
 
   return;
@@ -173,13 +175,14 @@ void render(AppState *state) {
   mvwprintw(state->input_win, 1, 1, "%-*s", state->term_w - 4,
             state->user_input.buf);
   wrefresh(state->input_win);
+
+  werase(state->ascii_win);
+  wborder(state->ascii_win, 0, 0, 0, 0, 0, 0, 0, 0);
   for (int i = 0; i < state->cur_render.rows; i++) {
     mvwaddnstr(state->ascii_win, offset_h + i, offset_w,
                &state->cur_render.buf[i * (state->cur_render.cols + 1)],
                state->cur_render.cols);
   }
-  mvwprintw(state->ascii_win, 1, 1, "pos: %dx%d size: %dwx%dh", ascii_w,
-            ascii_h, ascii_w, ascii_h);
   wrefresh(state->ascii_win);
 
   mvwprintw(state->input_win, 1, 1, "%s", state->user_input.buf);
@@ -223,7 +226,6 @@ void reinit_windows(AppState *state) {
 int read_img(char *filename, Image *img) {
   img->img = stbi_load(filename, &img->width, &img->height, &img->channels, 3);
   if (img->img == NULL) {
-    // printf("Could not load image\n");
     return 1;
   }
   return 0;
@@ -242,10 +244,6 @@ char get_char_from_lightness(float lightness) {
 
 ASCIIRender generate_ascii_render(char *out, size_t out_size, int cols,
                                   int rows) {
-  // assert(out != NULL);
-  // assert(rows > 0);
-  // assert(cols > 0);
-  // assert(out_size == rows * cols + rows);
   ASCIIRender render = {
       .buf = out, .rows = rows, .cols = cols, .size = out_size};
   return render;
