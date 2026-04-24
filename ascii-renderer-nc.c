@@ -37,6 +37,7 @@ typedef struct {
 
   char error[256];
   bool should_rerender;
+  bool should_resize;
   bool should_quit;
 } AppState;
 
@@ -107,6 +108,7 @@ AppState init_state() {
                     .cur_render = r,
                     .user_input = in,
                     .should_rerender = true,
+                    .should_resize = false,
                     .should_quit = false};
 
   return state;
@@ -146,6 +148,10 @@ void update(AppState *state, int event) {
       state->cur_render = convert_to_ascii(&state->img, bw, SAMPLES);
     }
     return;
+  case KEY_RESIZE:
+    state->should_resize = true;
+    state->should_rerender = true;
+    break;
   default:
     update_input(&state->user_input, event);
     state->should_rerender = 1;
@@ -158,6 +164,11 @@ void update(AppState *state, int event) {
 void render(AppState *state) {
   if (!state->should_rerender)
     return;
+
+  if (state->should_resize) {
+    reinit_windows(state);
+    state->should_resize = false;
+  }
 
   int ascii_w, ascii_h;
   getmaxyx(state->ascii_win, ascii_h, ascii_w);
