@@ -295,9 +295,9 @@ ASCIIRender convert_to_ascii(Image *img, int block_width, int samples) {
             g = img->img[(y * img->width + x) * 3 + ch];
           } else {
             b = img->img[(y * img->width + x) * 3 + ch];
-            rel_lum = ((r * 0.2126) + (g * 0.7152) + (b * 0.0722)) / 255;
-            avg_rel_lum += rel_lum;
           }
+          rel_lum = ((r * 0.2126) + (g * 0.7152) + (b * 0.0722)) / 255;
+          avg_rel_lum += rel_lum;
         }
       }
       avg_rel_lum /= samples;
