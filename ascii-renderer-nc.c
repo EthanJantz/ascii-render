@@ -10,6 +10,7 @@
 
 typedef struct {
   char *buf;
+  short *pairs;
   int rows;
   int cols;
   size_t size;
@@ -51,9 +52,10 @@ void reinit_windows(AppState *state);
 
 // Helpers
 int read_img(char *filename, Image *img);
-ASCIIRender generate_ascii_render(char *out, size_t out_size, int cols,
-                                  int rows);
+ASCIIRender generate_ascii_render(char *out, size_t out_size, short *pairs,
+                                  size_t pairs_size, int cols, int rows);
 char get_char_from_lightness(float lightness);
+int quantize(unsigned char val);
 ASCIIRender convert_to_ascii(Image *img, int block_width, int samples);
 void update_input(UserInput *cur, int in);
 
@@ -72,6 +74,14 @@ void setup_ncurses() {
   cbreak();
   noecho();
   keypad(stdscr, TRUE);
+  if (has_colors()) {
+    start_color();
+    use_default_colors();
+    // initialize colorspace
+    for (int i = 0; i < 216; i++) {
+      init_pair(i + 1, i + 16, -1); // pair 1–216 → color 16–231
+    }
+  }
   refresh();
 }
 
@@ -196,9 +206,13 @@ void render(AppState *state) {
   werase(state->ascii_win);
   wborder(state->ascii_win, 0, 0, 0, 0, 0, 0, 0, 0);
   for (int i = 0; i < state->cur_render.rows; i++) {
-    mvwaddnstr(state->ascii_win, offset_h + i, offset_w,
-               &state->cur_render.buf[i * (state->cur_render.cols + 1)],
-               state->cur_render.cols);
+    for (int j = 0; j < state->cur_render.cols; j++) {
+      short pair = state->cur_render.pairs[i * state->cur_render.cols + j];
+      wattron(state->ascii_win, COLOR_PAIR(pair));
+      mvwaddch(state->ascii_win, offset_h + i, offset_w + j,
+               state->cur_render.buf[i * (state->cur_render.cols + 1) + j]);
+      wattroff(state->ascii_win, COLOR_PAIR(pair));
+    }
   }
   wrefresh(state->ascii_win);
 
@@ -260,17 +274,16 @@ char get_char_from_lightness(float lightness) {
   return ASCII[idx];
 }
 
-ASCIIRender generate_ascii_render(char *out, size_t out_size, int cols,
-                                  int rows) {
+int quantize(unsigned char val) { return (int)round(val * 5.0 / 255.0); }
+
+ASCIIRender generate_ascii_render(char *out, size_t out_size, short *pairs,
+                                  size_t pairs_size, int cols, int rows) {
   ASCIIRender render = {
-      .buf = out, .rows = rows, .cols = cols, .size = out_size};
+      .buf = out, .pairs = pairs, .rows = rows, .cols = cols, .size = out_size};
   return render;
 }
 
 ASCIIRender convert_to_ascii(Image *img, int block_width, int samples) {
-  unsigned char r, g, b;
-  float rel_lum;
-  float avg_rel_lum;
   int block_height =
       block_width *
       BLOCK_ASPECT_RATIO; // monospaced term chars are 2:1 height/width
@@ -280,10 +293,21 @@ ASCIIRender convert_to_ascii(Image *img, int block_width, int samples) {
   size_t out_size = cols * rows + rows;
   char *out = malloc(out_size);
 
+  unsigned char r, g, b;
+  float avg_r, avg_g, avg_b;
+  int ri, gi, bi, pair_id;
+
+  size_t pairs_size = cols * rows;
+  short *pairs = malloc(pairs_size * sizeof(short));
+
+  float rel_lum;
+  float avg_rel_lum;
+
   for (int row = 0; row < rows; row++) {
     for (int col = 0; col < cols; col++) {
       for (int ch = 0; ch < CHANNELS; ch++) {
         avg_rel_lum = 0.0;
+        avg_r = 0.0, avg_g = 0.0, avg_b = 0.0;
 
         for (int s = 1; s <= samples; s++) {
           int x = col * block_width + (s * block_width) / (s + 1);
@@ -298,8 +322,18 @@ ASCIIRender convert_to_ascii(Image *img, int block_width, int samples) {
           }
           rel_lum = ((r * 0.2126) + (g * 0.7152) + (b * 0.0722)) / 255;
           avg_rel_lum += rel_lum;
+          avg_r += r;
+          avg_g += g;
+          avg_b += b;
         }
       }
+
+      ri = quantize(avg_r);
+      gi = quantize(avg_g);
+      bi = quantize(avg_b);
+      pair_id = 1 + (36 * ri) + (6 * gi) + bi;
+      pairs[row * cols + col] = pair_id;
+
       avg_rel_lum /= samples;
       out[row * (cols + 1) + col] = get_char_from_lightness(avg_rel_lum);
 
@@ -309,7 +343,8 @@ ASCIIRender convert_to_ascii(Image *img, int block_width, int samples) {
     }
   }
 
-  ASCIIRender render = generate_ascii_render(out, out_size, cols, rows);
+  ASCIIRender render =
+      generate_ascii_render(out, out_size, pairs, pairs_size, cols, rows);
   return render;
 }
 
