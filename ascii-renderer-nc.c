@@ -311,25 +311,22 @@ ASCIIRender convert_to_ascii(Image *img, int block_width, int samples) {
       for (int s = 1; s <= samples; s++) {
         int x = col * block_width + (s * block_width) / (s + 1);
         int y = row * block_height + (s * block_height) / (s + 1);
-        for (int ch = 0; ch < CHANNELS; ch++) {
-          if (ch == 0) {
-            r = img->img[(y * img->width + x) * 3 + ch];
-          } else if (ch == 1) {
-            g = img->img[(y * img->width + x) * 3 + ch];
-          } else {
-            b = img->img[(y * img->width + x) * 3 + ch];
-          }
-        }
+
+        r = img->img[(y * img->width + x) * 3 + 0];
+        g = img->img[(y * img->width + x) * 3 + 1];
+        b = img->img[(y * img->width + x) * 3 + 2];
         rel_lum = ((r * 0.2126) + (g * 0.7152) + (b * 0.0722)) / 255;
-        avg_rel_lum += rel_lum;
+
         avg_r += r;
         avg_g += g;
         avg_b += b;
+        avg_rel_lum += rel_lum;
       }
 
       avg_r /= samples;
       avg_g /= samples;
       avg_b /= samples;
+      avg_rel_lum /= samples;
 
       ri = quantize(avg_r);
       gi = quantize(avg_g);
@@ -337,7 +334,6 @@ ASCIIRender convert_to_ascii(Image *img, int block_width, int samples) {
       pair_id = 1 + (36 * ri) + (6 * gi) + bi;
       pairs[row * cols + col] = pair_id;
 
-      avg_rel_lum /= samples;
       out[row * (cols + 1) + col] = get_char_from_lightness(avg_rel_lum);
 
       if (col == cols - 1) {
