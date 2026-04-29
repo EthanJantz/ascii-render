@@ -305,14 +305,13 @@ ASCIIRender convert_to_ascii(Image *img, int block_width, int samples) {
 
   for (int row = 0; row < rows; row++) {
     for (int col = 0; col < cols; col++) {
-      for (int ch = 0; ch < CHANNELS; ch++) {
-        avg_rel_lum = 0.0;
-        avg_r = 0.0, avg_g = 0.0, avg_b = 0.0;
+      avg_r = 0.0, avg_g = 0.0, avg_b = 0.0;
+      avg_rel_lum = 0.0;
 
-        for (int s = 1; s <= samples; s++) {
-          int x = col * block_width + (s * block_width) / (s + 1);
-          int y = row * block_height + (s * block_height) / (s + 1);
-
+      for (int s = 1; s <= samples; s++) {
+        int x = col * block_width + (s * block_width) / (s + 1);
+        int y = row * block_height + (s * block_height) / (s + 1);
+        for (int ch = 0; ch < CHANNELS; ch++) {
           if (ch == 0) {
             r = img->img[(y * img->width + x) * 3 + ch];
           } else if (ch == 1) {
@@ -320,13 +319,17 @@ ASCIIRender convert_to_ascii(Image *img, int block_width, int samples) {
           } else {
             b = img->img[(y * img->width + x) * 3 + ch];
           }
-          rel_lum = ((r * 0.2126) + (g * 0.7152) + (b * 0.0722)) / 255;
-          avg_rel_lum += rel_lum;
-          avg_r += r;
-          avg_g += g;
-          avg_b += b;
         }
+        rel_lum = ((r * 0.2126) + (g * 0.7152) + (b * 0.0722)) / 255;
+        avg_rel_lum += rel_lum;
+        avg_r += r;
+        avg_g += g;
+        avg_b += b;
       }
+
+      avg_r /= samples;
+      avg_g /= samples;
+      avg_b /= samples;
 
       ri = quantize(avg_r);
       gi = quantize(avg_g);
