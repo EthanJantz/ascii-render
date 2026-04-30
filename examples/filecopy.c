@@ -1,3 +1,4 @@
+// minimal example for copying a file via arg
 #include <stdio.h>
 #include <stdlib.h>
 
