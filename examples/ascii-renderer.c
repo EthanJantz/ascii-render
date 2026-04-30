@@ -1,3 +1,4 @@
+// minimal ASCII renderer implementation as CLI
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
