@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
+#include "../stb_image.h"
 
 char getCharFromLightness(float lightness);
 char *convertToASCII(unsigned char *img, int width, int height, int channels,

@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
+#include "../stb_image.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb_image_write.h"
+#include "../stb_image_write.h"
 
 const int BLOCK_WIDTH = 8;
 const int BLOCK_HEIGHT = 8;
