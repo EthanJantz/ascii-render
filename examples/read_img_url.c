@@ -13,7 +13,7 @@ typedef struct {
 } Image;
 
 // Small memory struct for whatever is downloaded
-typedef struct MemoryStruct {
+typedef struct {
   unsigned char *memory; // This is the buffer to read from
   size_t size;
 } MemoryStruct;
@@ -36,6 +36,22 @@ static size_t write_cb(char *contents, size_t size, size_t nmemb, void *userp) {
   return realsize;
 }
 
+int url_parse(char buf) {
+  CURLUcode rc;
+  CURLU *url = curl_url();
+  rc = curl_url_set(url, CURLUPART_URL, "https://example.com", 0);
+  if (!rc) {
+    char *scheme;
+    rc = curl_url_get(url, CURLUPART_SCHEME, &scheme, 0);
+    if (!rc) {
+      printf("the scheme is %s\n", scheme);
+      curl_free(scheme);
+    }
+    curl_url_cleanup(url);
+  }
+  return 1;
+}
+
 int main() {
   // curl setup
   CURL *curl;
@@ -52,13 +68,15 @@ int main() {
   chunk.size = 0;
 
   // pull the data
-  char buf[256] = "https://upload.wikimedia.org/wikipedia/commons/1/19/"
-                  "Under_construction_graphic.gif";
+  char buf[256] =
+      "https://upload.wikimedia.org/wikipedia/commons/4/49/Thumb_up.JPG";
+
+  url_parse(*buf);
   if (curl) {
-    curl_easy_setopt(curl, CURLOPT_URL, buf);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_cb);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&chunk);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "libcurl-agent/1.0");
+    curl_easy_setopt(curl, CURLOPT_URL, buf);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&chunk);
     result = curl_easy_perform(curl);
 
     if (result != CURLE_OK) {
