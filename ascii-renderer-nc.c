@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <ctype.h>
+#include <curl/curl.h>
 #include <math.h>
 #include <ncurses.h>
 #include <stdio.h>
@@ -29,20 +30,29 @@ typedef struct {
 } UserInput;
 
 typedef struct {
+  unsigned char *memory;
+  size_t size;
+} MemoryStruct;
+
+typedef struct {
   int term_w, term_h;
   WINDOW *input_win, *ascii_win;
 
+  CURL *curl;
+  MemoryStruct chunk;
   Image img;
   ASCIIRender cur_render;
   UserInput user_input;
 
   char error[256];
+  bool should_curl;
   bool should_rerender;
   bool should_resize;
   bool should_quit;
 } AppState;
 
-// TUI mgmt
+// App
+CURLcode setup_curl(AppState *state);
 void setup_ncurses();
 AppState init_state();
 void update(AppState *state, int event);
@@ -50,14 +60,20 @@ void render(AppState *state);
 void teardown(AppState *state);
 void reinit_windows(AppState *state);
 
-// Helpers
+// CURL
+bool is_valid_url(UserInput *buf);
+static size_t write_cb(char *contents, size_t size, size_t nmemb, void *userp);
+
+// ASCII
 int read_img(char *filename, Image *img);
 ASCIIRender generate_ascii_render(char *out, size_t out_size, short *pairs,
                                   size_t pairs_size, int cols, int rows);
 char get_char_from_lightness(float lightness);
 int quantize(unsigned char val);
 ASCIIRender convert_to_ascii(Image *img, int block_width, int samples);
-void update_input(UserInput *cur, int in);
+
+// Input
+void update_input(UserInput *buf, int in);
 
 // Constants
 char ASCII[10] = {' ', '.', ':', '-', '=', '+', '*', '#', '%', '@'};
@@ -65,6 +81,16 @@ int N_ASCII = sizeof(ASCII) / sizeof(ASCII[0]);
 int BLOCK_ASPECT_RATIO = 2;
 int SAMPLES = 4;
 int CHANNELS = 3;
+
+CURLcode setup_curl(AppState *state) {
+  CURLcode result;
+  result = curl_global_init(CURL_GLOBAL_ALL);
+  if (result != CURLE_OK) {
+    return result;
+  }
+  state->curl = curl_easy_init();
+  return result;
+}
 
 void setup_ncurses() {
   srand(time(0));
@@ -117,6 +143,7 @@ AppState init_state() {
                     .ascii_win = ascii_win,
                     .cur_render = r,
                     .user_input = in,
+                    .should_curl = false,
                     .should_rerender = true,
                     .should_resize = false,
                     .should_quit = false};
@@ -132,31 +159,59 @@ void update(AppState *state, int event) {
   case '\n':
   case '\r':
     state->should_rerender = 1;
-    if (state->should_rerender && state->user_input.len > 0) {
-      int err = read_img(state->user_input.buf, &state->img);
-      if (err) {
-        werase(state->ascii_win);
-        wborder(state->ascii_win, 0, 0, 0, 0, 0, 0, 0, 0);
-        mvwprintw(state->ascii_win, 2, 1, "Could not load image\n");
-        return;
+    // Check input and read image to state
+    if (state->user_input.len > 0) {
+      if (is_valid_url(&state->user_input) && state->curl) {
+
+        curl_easy_setopt(state->curl, CURLOPT_WRITEFUNCTION, write_cb);
+        curl_easy_setopt(state->curl, CURLOPT_USERAGENT, "libcurl-agent/1.0");
+        curl_easy_setopt(state->curl, CURLOPT_URL, state->user_input.buf);
+        curl_easy_setopt(state->curl, CURLOPT_WRITEDATA, (void *)&state->chunk);
+        CURLcode result = curl_easy_perform(state->curl);
+
+        if (result != CURLE_OK) {
+          werase(state->ascii_win);
+          wborder(state->ascii_win, 0, 0, 0, 0, 0, 0, 0, 0);
+          mvwprintw(state->ascii_win, 2, 1, "curl_easy_perform() failed %s\n",
+                    curl_easy_strerror(result));
+          wrefresh(state->ascii_win);
+          return;
+        } else {
+          state->img.img = stbi_load_from_memory(
+              state->chunk.memory, state->chunk.size, &state->img.width,
+              &state->img.height, &state->img.channels, CHANNELS);
+          werase(state->ascii_win);
+          wborder(state->ascii_win, 0, 0, 0, 0, 0, 0, 0, 0);
+          mvwprintw(state->ascii_win, 2, 1, "CURL!");
+        }
+
+      } else {
+        int err = read_img(state->user_input.buf, &state->img);
+        if (err) {
+          werase(state->ascii_win);
+          wborder(state->ascii_win, 0, 0, 0, 0, 0, 0, 0, 0);
+          mvwprintw(state->ascii_win, 2, 1, "Could not load image\n");
+          return;
+        }
       }
-
-      int ascii_w, ascii_h;
-      getmaxyx(state->ascii_win, ascii_h, ascii_w);
-      int interior_h = ascii_h - 2;
-      int interior_w = ascii_w - 2;
-      int denom_h = BLOCK_ASPECT_RATIO * interior_h;
-      // ceil idiom: ceil(x / y) == (x + y - 1) / y
-      int bw_w = (state->img.width + interior_w - 1) / interior_w;
-      int bw_h = (state->img.height + denom_h - 1) / denom_h;
-      int bw = bw_h > bw_w ? bw_h : bw_w;
-      if (bw == 0)
-        bw = 1;
-
-      if (state->cur_render.buf != 0)
-        free(state->cur_render.buf);
-      state->cur_render = convert_to_ascii(&state->img, bw, SAMPLES);
     }
+
+    // Calculate maximum block width for render to fit in window
+    int ascii_w, ascii_h;
+    getmaxyx(state->ascii_win, ascii_h, ascii_w);
+    int interior_h = ascii_h - 2;
+    int interior_w = ascii_w - 2;
+    int denom_h = BLOCK_ASPECT_RATIO * interior_h;
+    // ceil idiom: ceil(x / y) == (x + y - 1) / y
+    int bw_w = (state->img.width + interior_w - 1) / interior_w;
+    int bw_h = (state->img.height + denom_h - 1) / denom_h;
+    int bw = bw_h > bw_w ? bw_h : bw_w;
+    if (bw == 0)
+      bw = 1;
+
+    if (state->cur_render.buf != 0)
+      free(state->cur_render.buf);
+    state->cur_render = convert_to_ascii(&state->img, bw, SAMPLES);
     return;
   case KEY_RESIZE:
     state->should_resize = true;
@@ -254,6 +309,24 @@ void reinit_windows(AppState *state) {
   state->input_win = input_win;
 }
 
+static size_t write_cb(char *contents, size_t size, size_t nmemb, void *userp) {
+  size_t realsize = size * nmemb;
+  MemoryStruct *mem = (MemoryStruct *)userp;
+
+  unsigned char *ptr = realloc(mem->memory, mem->size + realsize + 1);
+  if (!ptr) {
+    printf("Not enough memory (realloc returned NULL)\n");
+    return 0;
+  }
+
+  mem->memory = ptr;
+  memcpy(&(mem->memory[mem->size]), contents, realsize);
+  mem->size += realsize;
+  mem->memory[mem->size] = 0;
+
+  return realsize;
+}
+
 int read_img(char *filename, Image *img) {
   img->img =
       stbi_load(filename, &img->width, &img->height, &img->channels, CHANNELS);
@@ -264,8 +337,12 @@ int read_img(char *filename, Image *img) {
 }
 
 void teardown(AppState *state) {
+  free(state->cur_render.pairs);
+  free(state->chunk.memory);
   free(state->cur_render.buf);
   stbi_image_free(state->img.img);
+  curl_easy_cleanup(state->curl);
+  curl_global_cleanup();
   endwin();
 }
 
@@ -347,27 +424,50 @@ ASCIIRender convert_to_ascii(Image *img, int block_width, int samples) {
   return render;
 }
 
-void update_input(UserInput *cur, int in) {
+bool is_valid_url(UserInput *buf) {
+  bool valid = false;
+  CURLUcode rc;
+  CURLU *url = curl_url();
+  rc = curl_url_set(url, CURLUPART_URL, buf->buf, 0);
+  char *scheme;
+  if (!rc) {
+    rc = curl_url_get(url, CURLUPART_SCHEME, &scheme, 0);
+    if (rc) {
+      printf("Couldn't parse URL");
+    }
+  }
+  if (scheme == NULL) {
+    return valid;
+  }
+  if (!strcmp("https", scheme) || !strcmp("http", scheme))
+    valid = true;
+  curl_free(scheme);
+  curl_url_cleanup(url);
+  return valid;
+}
+
+void update_input(UserInput *buf, int in) {
   if (in == KEY_BACKSPACE || in == 127 || in == 8) {
-    if (cur->len == 0)
+    if (buf->len == 0)
       return;
-    --cur->len;
-    cur->buf[cur->len] = '\0';
+    --buf->len;
+    buf->buf[buf->len] = '\0';
     return;
   }
 
-  if (!isprint(in) || cur->len >= sizeof(cur->buf) - 1)
+  if (!isprint(in) || buf->len >= sizeof(buf->buf) - 1)
     return;
 
-  cur->buf[cur->len] = in;
-  ++cur->len;
-  cur->buf[cur->len] = '\0';
+  buf->buf[buf->len] = in;
+  ++buf->len;
+  buf->buf[buf->len] = '\0';
   return;
 }
 
 int main() {
   setup_ncurses();
   AppState state = init_state();
+  setup_curl(&state);
   while (!state.should_quit) {
     render(&state);
     int key = getch();
