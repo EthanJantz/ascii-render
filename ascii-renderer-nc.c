@@ -209,8 +209,10 @@ void update(AppState *state, int event) {
       free(state->cur_render.pairs);
 
     state->cur_render = convert_to_ascii(&state->img, bw, SAMPLES);
-    if (state->chunk.memory != NULL)
+    if (state->chunk.memory != NULL) {
+      free(state->chunk.memory);
       state->chunk.memory = NULL;
+    }
     if (state->chunk.size > 0)
       state->chunk.size = 0;
     return;
