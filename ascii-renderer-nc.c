@@ -177,12 +177,12 @@ void update(AppState *state, int event) {
           wrefresh(state->ascii_win);
           return;
         } else {
+          if (state->img.img != 0)
+            stbi_image_free(state->img.img);
+
           state->img.img = stbi_load_from_memory(
               state->chunk.memory, state->chunk.size, &state->img.width,
               &state->img.height, &state->img.channels, CHANNELS);
-          werase(state->ascii_win);
-          wborder(state->ascii_win, 0, 0, 0, 0, 0, 0, 0, 0);
-          mvwprintw(state->ascii_win, 2, 1, "CURL!");
         }
       }
     }
@@ -202,7 +202,14 @@ void update(AppState *state, int event) {
 
     if (state->cur_render.buf != 0)
       free(state->cur_render.buf);
+    if (state->cur_render.pairs != 0)
+      free(state->cur_render.pairs);
+
     state->cur_render = convert_to_ascii(&state->img, bw, SAMPLES);
+    if (state->chunk.memory != NULL)
+      state->chunk.memory = NULL;
+    if (state->chunk.size > 0)
+      state->chunk.size = 0;
     return;
   case KEY_RESIZE:
     state->should_resize = true;
@@ -296,7 +303,9 @@ void reinit_windows(AppState *state) {
 
   state->term_w = sx;
   state->term_h = sy;
+  delwin(state->ascii_win);
   state->ascii_win = ascii_win;
+  delwin(state->input_win);
   state->input_win = input_win;
 }
 
@@ -334,6 +343,8 @@ void teardown(AppState *state) {
   stbi_image_free(state->img.img);
   curl_easy_cleanup(state->curl);
   curl_global_cleanup();
+  delwin(state->input_win);
+  delwin(state->ascii_win);
   endwin();
 }
 
