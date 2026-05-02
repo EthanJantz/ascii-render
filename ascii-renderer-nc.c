@@ -45,7 +45,6 @@ typedef struct {
   UserInput user_input;
 
   char error[256];
-  bool should_curl;
   bool should_rerender;
   bool should_resize;
   bool should_quit;
@@ -73,6 +72,7 @@ int quantize(unsigned char val);
 ASCIIRender convert_to_ascii(Image *img, int block_width, int samples);
 
 // Input
+void clear_input(UserInput *buf);
 void update_input(UserInput *buf, int in);
 
 // Constants
@@ -143,7 +143,6 @@ AppState init_state() {
                     .ascii_win = ascii_win,
                     .cur_render = r,
                     .user_input = in,
-                    .should_curl = false,
                     .should_rerender = true,
                     .should_resize = false,
                     .should_quit = false};
@@ -153,6 +152,10 @@ AppState init_state() {
 
 void update(AppState *state, int event) {
   switch (event) {
+  case 23:
+    clear_input(&state->user_input);
+    state->should_rerender = 1;
+    break;
   case 27:
     state->should_quit = 1;
     return;
@@ -212,8 +215,8 @@ void update(AppState *state, int event) {
       state->chunk.size = 0;
     return;
   case KEY_RESIZE:
-    state->should_resize = true;
-    state->should_rerender = true;
+    state->should_resize = 1;
+    state->should_rerender = 1;
     break;
   default:
     update_input(&state->user_input, event);
@@ -269,6 +272,8 @@ void render(AppState *state) {
   }
   wrefresh(state->ascii_win);
 
+  werase(state->input_win);
+  wborder(state->input_win, 0, 0, 0, 0, 0, 0, 0, 0);
   mvwprintw(state->input_win, 1, 1, "%s", state->user_input.buf);
   wrefresh(state->input_win);
   state->should_rerender = 0;
@@ -449,6 +454,11 @@ bool is_valid_url(UserInput *buf) {
   curl_free(scheme);
   curl_url_cleanup(url);
   return valid;
+}
+
+void clear_input(UserInput *buf) {
+  buf->buf[buf->len] = '\0';
+  buf->len = 0;
 }
 
 void update_input(UserInput *buf, int in) {
