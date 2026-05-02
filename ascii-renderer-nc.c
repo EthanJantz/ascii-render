@@ -184,15 +184,6 @@ void update(AppState *state, int event) {
           wborder(state->ascii_win, 0, 0, 0, 0, 0, 0, 0, 0);
           mvwprintw(state->ascii_win, 2, 1, "CURL!");
         }
-
-      } else {
-        int err = read_img(state->user_input.buf, &state->img);
-        if (err) {
-          werase(state->ascii_win);
-          wborder(state->ascii_win, 0, 0, 0, 0, 0, 0, 0, 0);
-          mvwprintw(state->ascii_win, 2, 1, "Could not load image\n");
-          return;
-        }
       }
     }
 
