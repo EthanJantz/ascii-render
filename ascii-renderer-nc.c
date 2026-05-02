@@ -1,4 +1,3 @@
-#include <assert.h>
 #include <ctype.h>
 #include <curl/curl.h>
 #include <math.h>
