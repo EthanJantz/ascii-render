@@ -43,7 +43,6 @@ typedef struct {
   ASCIIRender cur_render;
   UserInput user_input;
 
-  char error[256];
   bool should_rerender;
   bool should_resize;
   bool should_quit;
@@ -64,8 +63,6 @@ static size_t write_cb(char *contents, size_t size, size_t nmemb, void *userp);
 
 // ASCII
 int read_img(char *filename, Image *img);
-ASCIIRender generate_ascii_render(char *out, size_t out_size, short *pairs,
-                                  size_t pairs_size, int cols, int rows);
 char get_char_from_lightness(float lightness);
 int quantize(unsigned char val);
 ASCIIRender convert_to_ascii(Image *img, int block_width, int samples);
@@ -427,8 +424,8 @@ ASCIIRender convert_to_ascii(Image *img, int block_width, int samples) {
     }
   }
 
-  ASCIIRender render =
-      generate_ascii_render(out, out_size, pairs, pairs_size, cols, rows);
+  ASCIIRender render = {
+      .buf = out, .pairs = pairs, .rows = rows, .cols = cols, .size = out_size};
   return render;
 }
 
