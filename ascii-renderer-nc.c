@@ -416,20 +416,23 @@ ASCIIRender convert_to_ascii(Image *img, int block_width, int samples) {
 }
 
 bool is_valid_url(UserInput *buf) {
-  bool valid = false;
-  CURLUcode rc;
   CURLU *url = curl_url();
-  rc = curl_url_set(url, CURLUPART_URL, buf->buf, 0);
-  char *scheme;
-  if (!rc) {
-    rc = curl_url_get(url, CURLUPART_SCHEME, &scheme, 0);
-    if (rc) {
-      printf("Couldn't parse URL");
-    }
-  }
-  if (scheme == NULL) {
+  CURLUcode rc = curl_url_set(url, CURLUPART_URL, buf->buf, 0);
+  bool valid = false;
+  char *scheme = NULL;
+
+  if (rc) {
+    printf("Couldn't parse URL\n");
+    curl_url_cleanup(url);
     return valid;
   }
+
+  rc = curl_url_get(url, CURLUPART_SCHEME, &scheme, 0);
+  if (scheme == NULL) {
+    curl_url_cleanup(url);
+    return valid;
+  }
+
   if (!strcmp("https", scheme) || !strcmp("http", scheme))
     valid = true;
   curl_free(scheme);
