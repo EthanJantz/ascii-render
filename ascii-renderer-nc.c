@@ -148,11 +148,11 @@ AppState init_state() {
 
 void update(AppState *state, int event) {
   switch (event) {
-  case 23:
+  case 23: // <C-w>
     clear_input(&state->user_input);
     state->should_rerender = 1;
-    break;
-  case 27:
+    return;
+  case 27: // ESC
     state->should_quit = 1;
     return;
   case '\n':
@@ -455,8 +455,8 @@ bool is_valid_url(UserInput *buf) {
 }
 
 void clear_input(UserInput *buf) {
-  buf->buf[buf->len] = '\0';
   buf->len = 0;
+  buf->buf[buf->len] = '\0';
 }
 
 void update_input(UserInput *buf, int in) {
