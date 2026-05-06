@@ -2,3 +2,5 @@ a.out
 *.txt
 *.png
 *.jpg
+.idea/
+tuascii
