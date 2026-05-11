@@ -52,6 +52,7 @@ typedef struct {
 CURLcode setup_curl(AppState *state);
 void setup_ncurses();
 AppState init_state();
+void welcome_message(AppState *state);
 void update(AppState *state, int event);
 void render(AppState *state);
 void teardown(AppState *state);
@@ -144,6 +145,29 @@ AppState init_state() {
                     .should_quit = false};
 
   return state;
+}
+
+void welcome_message(AppState *state) {
+  int offset_h = state->term_h / 2;
+  int offset_w = state->term_w / 2;
+
+  WINDOW *welcome = newwin(10, 60, offset_h - 10, offset_w - 30);
+
+  wborder(welcome, 0, 0, 0, 0, 0, 0, 0, 0);
+  mvwaddstr(welcome, 2, 1, "Welcome to my ASCII Renderer!");
+  mvwaddstr(welcome, 3, 1,
+            "To use it, find a URL pointing to an image file, then");
+  mvwaddstr(welcome, 4, 1,
+            "type or paste it into the input window and press ENTER.");
+  mvwaddstr(welcome, 5, 1, "CTRL+W clears the input window.");
+  mvwaddstr(welcome, 6, 1, "ESC to exit");
+  wrefresh(welcome);
+
+  getch();
+
+  delwin(welcome);
+  clear();
+  refresh();
 }
 
 void update(AppState *state, int event) {
@@ -482,6 +506,7 @@ int main() {
   setup_ncurses();
   AppState state = init_state();
   setup_curl(&state);
+  welcome_message(&state);
   while (!state.should_quit) {
     render(&state);
     int key = getch();
