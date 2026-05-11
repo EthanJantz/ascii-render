@@ -120,7 +120,7 @@ AppState init_state() {
   input_y = margin;
 
   ascii_w = sx - (margin * 2);
-  ascii_h = sy * .9 - (margin * 2);
+  ascii_h = sy * .95 - (margin * 2);
   ascii_x = margin;
   ascii_y = input_y + input_h;
 
@@ -252,7 +252,14 @@ void render(AppState *state) {
     offset_h = offset_h == 0 ? 1 : offset_h;
   }
 
+  werase(state->input_win);
+  wborder(state->input_win, 0, 0, 0, 0, 0, 0, 0, 0);
+  mvwprintw(state->input_win, 0, 0, "URL");
+
+  int right_align_start = state->term_w - 18;
+  mvwprintw(state->input_win, 0, right_align_start, "CTRL+W to clear");
   mvwprintw(state->input_win, 1, 1, "%s", state->user_input.buf);
+  // Limit input buffer display
   mvwprintw(state->input_win, 1, 1, "%-*s", state->term_w - 4,
             state->user_input.buf);
   wrefresh(state->input_win);
@@ -270,10 +277,6 @@ void render(AppState *state) {
   }
   wrefresh(state->ascii_win);
 
-  werase(state->input_win);
-  wborder(state->input_win, 0, 0, 0, 0, 0, 0, 0, 0);
-  mvwprintw(state->input_win, 1, 1, "%s", state->user_input.buf);
-  wrefresh(state->input_win);
   state->should_rerender = 0;
 }
 
@@ -296,13 +299,9 @@ void reinit_windows(AppState *state) {
 
   WINDOW *input_win = newwin(input_h, input_w, input_y, input_x);
   wborder(input_win, 0, 0, 0, 0, 0, 0, 0, 0);
-  mvwprintw(input_win, 1, 1, "pos: %dx%d size: %dwx%dh", input_x, input_y,
-            input_w, input_h);
 
   WINDOW *ascii_win = newwin(ascii_h, ascii_w, ascii_y, ascii_x);
   wborder(ascii_win, 0, 0, 0, 0, 0, 0, 0, 0);
-  mvwprintw(ascii_win, 1, 1, "pos: %dx%d size: %dwx%dh", ascii_x, ascii_y,
-            ascii_w, ascii_h);
 
   state->term_w = sx;
   state->term_h = sy;
@@ -310,6 +309,8 @@ void reinit_windows(AppState *state) {
   state->ascii_win = ascii_win;
   delwin(state->input_win);
   state->input_win = input_win;
+
+  refresh();
 }
 
 static size_t write_cb(char *contents, size_t size, size_t nmemb, void *userp) {
