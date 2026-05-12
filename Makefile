@@ -1,3 +1,4 @@
+HEADERS=ascii-renderer-nc.h
 CC?=gcc -Wall
 
 all: tuascii
@@ -8,7 +9,7 @@ tuascii: ascii-renderer-nc.o
 install: tuascii
 	cp tuascii /usr/local/bin/
 
-%.o: %.c 
+%.o: %.c $(HEADERS)
 	$(CC) $< -c -o $@
 
 clean:

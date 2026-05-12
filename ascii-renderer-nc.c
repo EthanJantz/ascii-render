@@ -4,75 +4,14 @@
 #include <ncurses.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <strings.h>
 #include <time.h>
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-typedef struct {
-  char *buf;
-  short *pairs;
-  int rows;
-  int cols;
-  size_t size;
-} ASCIIRender;
+#include "ascii-renderer-nc.h"
 
-typedef struct {
-  unsigned char *img;
-  int width;
-  int height;
-  int channels;
-} Image;
-
-typedef struct {
-  char buf[256];
-  int len;
-} UserInput;
-
-typedef struct {
-  unsigned char *memory;
-  size_t size;
-} MemoryStruct;
-
-typedef struct {
-  int term_w, term_h;
-  WINDOW *input_win, *ascii_win;
-
-  CURL *curl;
-  MemoryStruct chunk;
-  Image img;
-  ASCIIRender cur_render;
-  UserInput user_input;
-
-  bool should_rerender;
-  bool should_resize;
-  bool should_quit;
-} AppState;
-
-// App
-CURLcode setup_curl(AppState *state);
-void setup_ncurses();
-AppState init_state();
-void welcome_message(AppState *state);
-void update(AppState *state, int event);
-void render(AppState *state);
-void teardown(AppState *state);
-void reinit_windows(AppState *state);
-
-// CURL
-bool is_valid_url(UserInput *buf);
-static size_t write_cb(char *contents, size_t size, size_t nmemb, void *userp);
-
-// ASCII
-int read_img(char *filename, Image *img);
-char get_char_from_lightness(float lightness);
-int quantize(unsigned char val);
-ASCIIRender convert_to_ascii(Image *img, int block_width, int samples);
-
-// Input
-void clear_input(UserInput *buf);
-void update_input(UserInput *buf, int in);
-
-// Constants
 char ASCII[10] = {' ', '.', ':', '-', '=', '+', '*', '#', '%', '@'};
 int N_ASCII = sizeof(ASCII) / sizeof(ASCII[0]);
 int BLOCK_ASPECT_RATIO = 2;
@@ -108,7 +47,8 @@ void setup_ncurses() {
   refresh();
 }
 
-AppState init_state() {
+void init_state(AppState *state) {
+  bzero(state, sizeof(*state));
   int sx, sy;
   getmaxyx(stdscr, sy, sx);
 
@@ -125,26 +65,16 @@ AppState init_state() {
   ascii_x = margin;
   ascii_y = input_y + input_h;
 
-  WINDOW *input_win = newwin(input_h, input_w, input_y, input_x);
-  wborder(input_win, 0, 0, 0, 0, 0, 0, 0, 0);
+  state->term_w = sx;
+  state->term_h = sy;
+  state->input_win = newwin(input_h, input_w, input_y, input_x);
+  state->ascii_win = newwin(ascii_h, ascii_w, ascii_y, ascii_x);
+  state->should_rerender = true;
+  state->should_resize = false;
+  state->should_quit = false;
 
-  WINDOW *ascii_win = newwin(ascii_h, ascii_w, ascii_y, ascii_x);
-  wborder(ascii_win, 0, 0, 0, 0, 0, 0, 0, 0);
-
-  ASCIIRender r = {0};
-  UserInput in = {0};
-
-  AppState state = {.term_w = sx,
-                    .term_h = sy,
-                    .input_win = input_win,
-                    .ascii_win = ascii_win,
-                    .cur_render = r,
-                    .user_input = in,
-                    .should_rerender = true,
-                    .should_resize = false,
-                    .should_quit = false};
-
-  return state;
+  wborder(state->ascii_win, 0, 0, 0, 0, 0, 0, 0, 0);
+  wborder(state->input_win, 0, 0, 0, 0, 0, 0, 0, 0);
 }
 
 void welcome_message(AppState *state) {
@@ -504,7 +434,8 @@ void update_input(UserInput *buf, int in) {
 
 int main() {
   setup_ncurses();
-  AppState state = init_state();
+  AppState state = {0};
+  init_state(&state);
   setup_curl(&state);
   welcome_message(&state);
   while (!state.should_quit) {
