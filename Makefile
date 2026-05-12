@@ -1,5 +1,5 @@
 HEADERS=ascii-renderer-nc.h
-CC?=gcc -Wall
+CC=gcc -Wall -g
 
 all: tuascii
 

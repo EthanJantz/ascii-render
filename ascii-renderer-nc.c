@@ -304,6 +304,7 @@ void teardown(AppState *state) {
   delwin(state->input_win);
   delwin(state->ascii_win);
   endwin();
+  delscreen(set_term(NULL));
 }
 
 char get_char_from_lightness(float lightness) {
