@@ -3,3 +3,5 @@ tuascii
 *.txt
 *.png
 *.jpg
+.idea/
+tuascii
